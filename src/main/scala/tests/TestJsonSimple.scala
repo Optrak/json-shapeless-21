@@ -90,7 +90,6 @@ object JsonParser {
 
 object JsonBits {
   type JResult = List[JField]
-  trait RealCoproduct
 }
 import JsonBits._
 trait JsonWriter[A] {
@@ -162,25 +161,6 @@ object JsonWriter {
 }
 
 
-object InsideObject2 {
-
-  case class Menu(first: String, mains: String, dessert: String)
-
-  sealed trait Msg extends RealCoproduct {
-    def target: String
-  }
-  case class Invite(target: String, place: String, nGuests: Int) extends Msg
-
-  case class DinnerInWith(target: String, menu: Menu, friend: Option[String]) extends Msg
-
-  case class DinnerOut(target: String, menu: Option[Menu]) extends Msg
-
-  case class Feast(target: String, menus: List[Menu]) extends Msg
-
-  case class DinnerIn(target: String, menu: Menu) extends Msg
-
-}
-
 object JsonSupport2 {
 
   implicit val IntParser = new JsonParser[Int] {
@@ -243,7 +223,7 @@ object JsonSupport2 {
 }
 
 object TestJsonSimple extends App {
-  import InsideObject2._
+  import Common._
   import JsonSupport2._
 
   def parse(n: JValue): Msg = {
