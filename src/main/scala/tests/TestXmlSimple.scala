@@ -214,20 +214,6 @@ object TestXmlSimple extends App {
     xmlParser.parse(n)
   }
 
-  val doubleWrapped =
-    <Stuff>
-      <DinnerIn>
-        <target>me</target>
-        <menu>
-          <Menu>
-            <first>soup</first>
-            <mains>beef</mains>
-            <dessert>ice-cream</dessert>
-          </Menu>
-        </menu>
-      </DinnerIn></Stuff>
-
-
   val singleWrapped = <Stuff>
     <DinnerIn>
       <target>me</target>
