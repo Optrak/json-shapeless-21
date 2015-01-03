@@ -195,6 +195,9 @@ object JsonSupport2 {
       }
     }
   }
+  
+  implicit def mkListParser[A](implicit aParser: JsonParser[A]) = new ListParser[A]
+  implicit def mkOptParser[A](implicit aParser: JsonParser[A]) = new OptParser[A]
 
   import JsonWriter._
 
@@ -219,6 +222,9 @@ object JsonSupport2 {
       toJResult(name, items)
     }
   }
+  
+  implicit def mkListWriter[A](implicit aWriter: JsonWriter[A]) = new ListWriter[A]
+  implicit def mkOptWriter[A](implicit aWriter: JsonWriter[A]) = new OptWriter[A]
 
 }
 
@@ -227,9 +233,6 @@ object TestJsonSimple extends App {
   import JsonSupport2._
 
   def parse(n: JValue): Msg = {
-    implicit val StringOptParser = new OptParser[String]
-    implicit val OptMenuParser = new OptParser[Menu]
-    implicit val ListMenuParser = new ListParser[Menu]
 
     val jsonParser = JsonParser[Msg]
     jsonParser.parse(n)
@@ -321,9 +324,6 @@ object TestJsonSimple extends App {
 
   def write(msg: Msg): JValue = {
 
-    implicit val StringOptWriter = new OptWriter[String]
-    implicit val OptMenuWriter = new OptWriter[Menu]
-    implicit val ListMenuWriter = new ListWriter[Menu]
     val jsonWriter = JsonWriter[Msg]
     jsonWriter.write(None, msg)
   }

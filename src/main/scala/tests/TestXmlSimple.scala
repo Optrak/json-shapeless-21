@@ -175,6 +175,9 @@ object XmlSupport2 {
       children.map(aParser.parse(_)).toList
     }
   }
+  
+  implicit def mkListParser[A](implicit aParser: XmlParser[A]) = new ListParser[A]("item")
+  implicit def mkOptParser[A](implicit aParser: XmlParser[A]) = new OptParser[A]
 
   import XmlWriter._
 
@@ -196,6 +199,8 @@ object XmlSupport2 {
       toNode(name, items)
     }
   }
+  implicit def mkListWriter[A](implicit aWriter: XmlWriter[A]) = new ListWriter[A]("item")
+  implicit def mkOptWriter[A](implicit aWriter: XmlWriter[A]) = new OptWriter[A]
 
 
 }
@@ -206,9 +211,6 @@ object TestXmlSimple extends App {
   import XmlSupport2._
 
   def parse(n: NodeSeq): Msg = {
-    implicit val StringOptParser = new OptParser[String]
-    implicit val OptMenuParser = new OptParser[Menu]
-    implicit val ListMenuParser = new ListParser[Menu]("Menu")
 
     val xmlParser = XmlParser[Msg]
     xmlParser.parse(n)
@@ -256,16 +258,16 @@ object TestXmlSimple extends App {
     <Feast>
       <target>me</target>
       <menus>
-        <Menu>
+        <item>
           <first>pate</first>
           <mains>beef</mains>
           <dessert>ice-cream</dessert>
-        </Menu>
-        <Menu>
+        </item>
+        <item>
           <first>soup</first>
           <mains>omlette</mains>
           <dessert>ice-cream</dessert>
-        </Menu>
+        </item>
       </menus>
     </Feast>
   </Stuff>
@@ -312,9 +314,6 @@ object TestXmlSimple extends App {
 
   def write(msg: Msg): NodeSeq = {
 
-    implicit val StringOptWriter = new OptWriter[String]
-    implicit val OptMenuWriter = new OptWriter[Menu]
-    implicit val ListMenuWriter = new ListWriter[Menu]("Menu")
     val xmlWriter = XmlWriter[Msg]
     <Stuff>{xmlWriter.write(None, msg)}</Stuff>
   }
