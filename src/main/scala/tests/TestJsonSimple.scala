@@ -15,88 +15,155 @@ trait JsonParser[A] {
 }
 
 
-object JsonParser {
-  def apply[T](implicit st: Lazy[JsonParser[T]]): JsonParser[T] = st.value
+object JsonParser extends LabelledTypeClassCompanion[JsonParser] {
+  implicit val typeClass: LabelledTypeClass[JsonParser] = new LabelledTypeClass[JsonParser] {
 
-
-  implicit def deriveHNil: JsonParser[HNil] =
-    new JsonParser[HNil] {
-      def parse(s: JValue) = 
-        // if (s == JNothing) Some(HNil) else None
-        HNil
-    }
-
-  implicit def deriveHCons[K <: Symbol, V, T <: HList]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[JsonParser[V]],
-   sct: Lazy[JsonParser[T]]
-    ): JsonParser[FieldType[K, V] :: T] =
-    new JsonParser[FieldType[K, V] :: T] {
-      def parse(jv: JValue): FieldType[K, V] :: T = {
-        val child = jv \ key.value.name
-        println(s"dervieHCons with jv $jv looking for ${key.value.name} found as $child")
-        val answer = { 
-          val front = scv.value.parse(child)
-          println(s"hcons front is $front")
-          val back = sct.value.parse(jv)
-          println(s"hcons back is $back")
-          field[K](front) :: back
-        }
-        println(s"HCons answer is $answer")
-        answer
+    def emptyProduct: JsonParser[HNil] =
+      new JsonParser[HNil] {
+        def parse(s: JValue) = HNil
       }
+
+    def product[F, T <: HList](fieldName: String, scf: JsonParser[F], sct: JsonParser[T]) = 
+      new JsonParser[F :: T] {
+        def parse(jv: JValue): F :: T = {
+          val child = jv \ fieldName
+          println(s"parse product from $jv looking for $fieldName found as $child")
+          val answer = { 
+            val front = scf.parse(child)
+            println(s"hcons front is $front")
+            val back = sct.parse(jv)
+            println(s"hcons back is $back")
+            front :: back
+          }
+          println(s"HCons answer is $answer")
+          answer
+        }
+      }
+
+    implicit def emptyCoproduct: JsonParser[CNil] = new JsonParser[CNil] {
+      def parse(s: JValue): CNil = throw new Exception("no coproduct found")
     }
 
-  implicit def deriveCNil: JsonParser[CNil] = new JsonParser[CNil] {
-    def parse(s: JValue): CNil = throw new Exception("no coproduct found")
+    implicit def coproduct[L, R <: Coproduct](fieldName: String, scl: => JsonParser[L], scr: => JsonParser[R]) =
+      new JsonParser[L :+: R] {
+        override def parse(jv: JValue): L :+: R = {
+          val child = jv \ fieldName
+          println(s"parse for deriveCCons with $jv looking for $fieldName found as $child")
+          val answer = child match {
+            case JNothing =>
+              println(s"trying cr.parse for $jv")
+              Inr(scr.parse(jv))
+              /*try {
+                println(s"trying cr.parse for $jv")
+                Inr(scr.parse(jv))
+              } catch {
+                case e: Exception => {
+                  Inl(scl.parse(jv))
+                }
+              }*/
+            case nn =>
+              println(s"found coproduct $fieldName, now parse it")
+              Inl(scl.parse(nn))
+          }
+          println(s"coProduct answer is $answer")
+          answer
+        }
+
+      }
+
+    implicit def project[F, G](instance: => JsonParser[G], to: F => G, from: G => F) =
+      new JsonParser[F] {
+        def parse(s: JValue): F = {
+          println(s"project, parsing from $s")
+          from(instance.parse(s))
+        }
+      }
   }
-
-  implicit def deriveCCons[K <: Symbol, V, T <: Coproduct]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[JsonParser[V]],
-   sct: Lazy[JsonParser[T]]
-    ): JsonParser[FieldType[K, V] :+: T] =
-    new JsonParser[FieldType[K, V] :+: T] {
-      def parse(jv: JValue): FieldType[K, V] :+: T = {
-        val child = (jv \ key.value.name)
-        println(s"parse for dervieCCons with $jv looking for ${key.value.name} found as $child")
-        val answer = child match {
-          case JNothing =>
-            println("missed this one, try next")
-            Inr(sct.value.parse(jv))
-          case nn =>
-            println(s"found coproduct ${key.value.name},  now parse it")
-            val parsed = scv.value.parse(nn)
-            Inl(field[K](parsed))
-        }
-        println(s"coProduct answer is $answer")
-        answer
-      }
-
-    }
-
-  implicit def deriveInstance[F, G]
-  (implicit gen: LabelledGeneric.Aux[F, G], sg: Lazy[JsonParser[G]]): JsonParser[F] =
-    new JsonParser[F] {
-      def parse(s: JValue): F = {
-        val parsed = sg.value.parse(s)
-        gen.from(parsed)
-      }
-    }
-
 }
 
 object JsonBits {
   type JResult = List[JField]
+  trait RealCoproduct
 }
+
 import JsonBits._
+
 trait JsonWriter[A] {
   def write(name: Option[String], a: A): JResult
 }
 
-object JsonWriter {
+object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
+  def apply[T](implicit w: JsonWriter[T]) = w
+
+  def toJResult(nameOpt: Option[String], ns: JResult): JResult = nameOpt.map(name => List(JField(name, ns))).getOrElse(List.empty)
+
+  def toJResult(nameOpt: Option[String], s: String): JResult = nameOpt.map(name => List(JField(name, s))).getOrElse(List.empty)
+
+  def toJResult(nameOpt: Option[String], content: Seq[JResult]): JResult = nameOpt.map(name => List(JField(name, content))).getOrElse(List.empty)
+  
+  implicit val typeClass: LabelledTypeClass[JsonWriter] = new LabelledTypeClass[JsonWriter] {
+
+    def emptyProduct = new JsonWriter[HNil] {
+      def write(name: Option[String], hn: HNil): JResult = {
+        println(s"emptyProduct on Write for $name")
+        assert(name == None)
+        List.empty
+      }
+    }
+
+    def product[F, T <: HList](fieldName: String, FHead: JsonWriter[F], FTail: JsonWriter[T]) = new JsonWriter[F :: T] {
+      def write(name: Option[String], ft: F :: T): JResult = {
+        println(s"product write for $fieldName in $ft name = $name")
+        val hCons = FHead.write(Some(fieldName), ft.head) ::: FTail.write(None, ft.tail)
+        val answer = name.map { name => 
+          List(JField(name, hCons))
+        }.getOrElse(hCons)
+        println(s"product for $fieldName gives $answer")
+        answer
+      }
+    }
+
+    def emptyCoproduct = new JsonWriter[CNil] {
+      def write(name: Option[String], t: CNil) = {
+        assert(name == None)
+        List.empty
+      }
+    }
+
+    def coproduct[L, R <: Coproduct] (fieldName: String, CL: => JsonWriter[L], CR: => JsonWriter[R]) = new JsonWriter[L :+: R] {
+      override def write(name: Option[String], lr: L :+: R): JResult = {
+        println(s"coproduct write for $fieldName name = $name")
+        val answer = lr match {
+          case Inl(l) => CL.write(None, l)
+          case Inr(r) => CR.write(None, r)
+        }
+        println(s"answer for coproduct $fieldName is $answer")
+        answer
+      }
+    }
+
+    def project[F, G](instance : => JsonWriter[G], to: F => G, from: G => F) = new JsonWriter[F] {
+      def write(name: Option[String], t: F): JResult = {
+        val tot = to(t)
+        println(s"project for $t name $name to(t) is $tot \nname ${t.getClass.getSimpleName}\n${instance}")
+        val answer = instance.write(name, tot)
+        /*val answer: JResult = t match {
+          case rc: RealCoproduct => 
+            // needs wrapper
+            val fieldName = t.getClass.getSimpleName
+            List(JField(fieldName, a1))
+          case _ => a1
+        }*/
+        println(s"project write $name answer $answer")
+        val revised = name.map { n => List(JField(n, answer))}.getOrElse(answer)
+        revised
+      }
+    }
+  }
+  
+}
+
+/*object JsonWriter {
   def apply[T](implicit st: Lazy[JsonWriter[T]]): JsonWriter[T] = st.value
 
   def toJResult(nameOpt: Option[String], ns: JResult): JResult = nameOpt.map(name => List(JField(name, ns))).getOrElse(List.empty)
@@ -104,7 +171,7 @@ object JsonWriter {
   def toJResult(nameOpt: Option[String], s: String): JResult = nameOpt.map(name => List(JField(name, s))).getOrElse(List.empty)
 
   def toJResult(nameOpt: Option[String], content: Seq[JResult]): JResult = nameOpt.map(name => List(JField(name, content))).getOrElse(List.empty)
-
+  
   implicit def deriveHNil: JsonWriter[HNil] =
     new JsonWriter[HNil] {
       def write(name: Option[String], n: HNil) = List.empty
@@ -145,20 +212,25 @@ object JsonWriter {
     new JsonWriter[FieldType[K, V] :+: T] {
       def write(name: Option[String], lr: FieldType[K, V] :+: T): JResult = {
         println(s"ccons write for ${key.value.name} name $name")
-        lr match {
+        val answer = lr match {
           case Inl(l) => scv.value.write(Some(key.value.name), l)
           case Inr(r) => sct.value.write(Some(key.value.name), r)
         }
+        println(s"answer for coproduct ${key.value.name} is $answer")
+        answer
       }
     }
 
   implicit def deriveInstance[F, G]
   (implicit gen: LabelledGeneric.Aux[F, G], sg: Lazy[JsonWriter[G]]): JsonWriter[F] =
     new JsonWriter[F] {
-      def write(name: Option[String], t: F): JResult = sg.value.write(name, gen.to(t))
+      def write(name: Option[String], t: F): JResult = {
+        println(s"writer deriveInstance ${gen.to(t)}")
+        sg.value.write(name, gen.to(t))
+      }
     }
 
-}
+}*/
 
 
 object JsonSupport2 {
@@ -232,11 +304,8 @@ object TestJsonSimple extends App {
   import Common._
   import JsonSupport2._
 
-  def parse(n: JValue): Msg = {
-
-    val jsonParser = JsonParser[Msg]
-    jsonParser.parse(n)
-  }
+  /* Test data */
+  
   val singleWrapped = "DinnerIn" ->
     ("target" -> "me") ~
       ("menu" -> (
@@ -280,6 +349,12 @@ object TestJsonSimple extends App {
     ("target" -> "me") ~
       ("menus" -> List.empty[JInt])
 
+  /* helper functions */
+      
+  def parse(n: JValue): Msg = {
+    val jsonParser = JsonParser[Msg]
+    jsonParser.parse(n)
+  }
 
   def justParse() {
     parse(singleWrapped) match {
@@ -329,7 +404,7 @@ object TestJsonSimple extends App {
   }
 
   def inOut(xml: JValue): Msg = {
-    val first= parse(xml)
+    val first = parse(xml)
     val written = write(first)
     println(s"---------------------------\n$written\n${compact(render(written))}")
     def second = parse(written)
@@ -337,21 +412,24 @@ object TestJsonSimple extends App {
     second
   }
   
-   justParse()
+  /* Tests */
+  
+  /*
+  justParse()
 
   val m1 = Menu("soup", "beef", "ice-cream")
   val dinnerIn = DinnerIn("me", m1)
   val dinnerInWritten = write(dinnerIn)
 
   println(s"dinnerInWritten is $dinnerInWritten\n${compact(render(dinnerInWritten))}")
-
+  */
 
   inOut(feastNoMenu)
-  inOut(feastWithMenus)
+  /*inOut(feastWithMenus)
 
   inOut(optionWrappedFriend)
   inOut(optionWrappedNoFriend)
 
   println("success")
-
+  */
 }

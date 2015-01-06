@@ -6,7 +6,7 @@ package tests
 object Common {
   case class Menu(first: String, mains: String, dessert: String)
 
-  sealed trait Msg {
+  sealed trait Msg extends JsonBits.RealCoproduct {
     def target: String
   }
   case class Invite(target: String, place: String, nGuests: Int) extends Msg
