@@ -101,7 +101,7 @@ object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
 
   def toJResult(nameOpt: Option[String], content: Seq[JResult]): JResult = nameOpt.map(name => List(JField(name, content))).getOrElse(List.empty)
   
-  implicit val typeClass: LabelledTypeClass[JsonWriter] = new LabelledTypeClass[JsonWriter] {
+  implicit val typeClass = new LabelledTypeClass[JsonWriter] {
 
     def emptyProduct = new JsonWriter[HNil] {
       def write(name: Option[String], hn: HNil): JResult = {
@@ -113,6 +113,7 @@ object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
 
     def product[F, T <: HList](fieldName: String, FHead: JsonWriter[F], FTail: JsonWriter[T]) = new JsonWriter[F :: T] {
       def write(name: Option[String], ft: F :: T): JResult = {
+        assert(fieldName != "Feast")
         println(s"product write for $fieldName in $ft name = $name")
         val hCons = FHead.write(Some(fieldName), ft.head) ::: FTail.write(None, ft.tail)
         val answer = name.map { name => 
@@ -134,9 +135,12 @@ object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
       override def write(name: Option[String], lr: L :+: R): JResult = {
         println(s"coproduct write for $fieldName name = $name")
         val answer = lr match {
-          case Inl(l) => CL.write(None, l)
+          case Inl(l) => CL.write(Some(fieldName), l)
           case Inr(r) => CR.write(None, r)
         }
+        /*val answer = name.map { name => 
+          List(JField(fieldName, a1))
+        }.getOrElse(a1)*/
         println(s"answer for coproduct $fieldName is $answer")
         answer
       }
@@ -147,90 +151,13 @@ object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
         val tot = to(t)
         println(s"project for $t name $name to(t) is $tot \nname ${t.getClass.getSimpleName}\n${instance}")
         val answer = instance.write(name, tot)
-        /*val answer: JResult = t match {
-          case rc: RealCoproduct => 
-            // needs wrapper
-            val fieldName = t.getClass.getSimpleName
-            List(JField(fieldName, a1))
-          case _ => a1
-        }*/
         println(s"project write $name answer $answer")
-        val revised = name.map { n => List(JField(n, answer))}.getOrElse(answer)
-        revised
+        answer
       }
     }
   }
   
 }
-
-/*object JsonWriter {
-  def apply[T](implicit st: Lazy[JsonWriter[T]]): JsonWriter[T] = st.value
-
-  def toJResult(nameOpt: Option[String], ns: JResult): JResult = nameOpt.map(name => List(JField(name, ns))).getOrElse(List.empty)
-
-  def toJResult(nameOpt: Option[String], s: String): JResult = nameOpt.map(name => List(JField(name, s))).getOrElse(List.empty)
-
-  def toJResult(nameOpt: Option[String], content: Seq[JResult]): JResult = nameOpt.map(name => List(JField(name, content))).getOrElse(List.empty)
-  
-  implicit def deriveHNil: JsonWriter[HNil] =
-    new JsonWriter[HNil] {
-      def write(name: Option[String], n: HNil) = List.empty
-    }
-
-  implicit def deriveHCons[K <: Symbol, V, T <: HList]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[JsonWriter[V]],
-   sct: Lazy[JsonWriter[T]]
-    ): JsonWriter[FieldType[K, V] :: T] =
-    new JsonWriter[FieldType[K, V] :: T] {
-      def write(name: Option[String], ft: FieldType[K, V] :: T): JResult = {
-        println(s"hcons writer name $name key ${key.value.name}")
-        val h = scv.value.write(Some(key.value.name), ft.head)
-        val t = sct.value.write(None, ft.tail)
-        println(s"hcons writer name $name key ${key.value.name} h is $h t is $t")
-        // this is too much like magic
-        val answer = name.map { nm =>
-          List(JField(nm, h ::: t))
-        }.getOrElse(h ::: t)
-        println(s"hcons answer is $answer")
-        answer
-      }
-    }
-
-
-  implicit def deriveCNil: JsonWriter[CNil] = new JsonWriter[CNil] {
-    def write(name: Option[String], t: CNil) = List.empty
-  }
-
-  implicit def deriveCCons[K <: Symbol, V, T <: Coproduct]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[JsonWriter[V]],
-   sct: Lazy[JsonWriter[T]]
-    ): JsonWriter[FieldType[K, V] :+: T] =
-    new JsonWriter[FieldType[K, V] :+: T] {
-      def write(name: Option[String], lr: FieldType[K, V] :+: T): JResult = {
-        println(s"ccons write for ${key.value.name} name $name")
-        val answer = lr match {
-          case Inl(l) => scv.value.write(Some(key.value.name), l)
-          case Inr(r) => sct.value.write(Some(key.value.name), r)
-        }
-        println(s"answer for coproduct ${key.value.name} is $answer")
-        answer
-      }
-    }
-
-  implicit def deriveInstance[F, G]
-  (implicit gen: LabelledGeneric.Aux[F, G], sg: Lazy[JsonWriter[G]]): JsonWriter[F] =
-    new JsonWriter[F] {
-      def write(name: Option[String], t: F): JResult = {
-        println(s"writer deriveInstance ${gen.to(t)}")
-        sg.value.write(name, gen.to(t))
-      }
-    }
-
-}*/
 
 
 object JsonSupport2 {
@@ -274,10 +201,10 @@ object JsonSupport2 {
   import JsonWriter._
 
   implicit val IntWriter = new JsonWriter[Int] {
-    def write(nameOpt: Option[String], i: Int)  = toJResult(nameOpt, i.toString)
+    def write(nameOpt: Option[String], i: Int) = toJResult(nameOpt, i.toString)
   }
   implicit val StringWriter = new JsonWriter[String] {
-    def write(nameOpt: Option[String], s: String)  = toJResult(nameOpt, s)
+    def write(nameOpt: Option[String], s: String) = toJResult(nameOpt, s)
   }
 
   class OptWriter[A](implicit aWriter: JsonWriter[A]) extends JsonWriter[Option[A]] {
