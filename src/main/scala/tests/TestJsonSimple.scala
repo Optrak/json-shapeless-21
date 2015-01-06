@@ -113,7 +113,6 @@ object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
 
     def product[F, T <: HList](fieldName: String, FHead: JsonWriter[F], FTail: JsonWriter[T]) = new JsonWriter[F :: T] {
       def write(name: Option[String], ft: F :: T): JResult = {
-        assert(fieldName != "Feast")
         println(s"product write for $fieldName in $ft name = $name")
         val hCons = FHead.write(Some(fieldName), ft.head) ::: FTail.write(None, ft.tail)
         val answer = name.map { name => 
@@ -135,7 +134,7 @@ object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
       override def write(name: Option[String], lr: L :+: R): JResult = {
         println(s"coproduct write for $fieldName name = $name")
         val answer = lr match {
-          case Inl(l) => CL.write(Some(fieldName), l)
+          case Inl(l) => CL.write(Some(fieldName), l) // or List(JField(fieldName, CL.write(None, l)))
           case Inr(r) => CR.write(None, r)
         }
         /*val answer = name.map { name => 

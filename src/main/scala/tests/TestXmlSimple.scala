@@ -11,147 +11,145 @@ trait XmlParser[A] {
   def parse(n: NodeSeq): A
 }
 
+object XmlParser extends LabelledTypeClassCompanion[XmlParser] {
+  implicit val typeClass: LabelledTypeClass[XmlParser] = new LabelledTypeClass[XmlParser] {
 
-object XmlParser {
-  def apply[T](implicit st: Lazy[XmlParser[T]]): XmlParser[T] = st.value
-
-
-  implicit def deriveHNil: XmlParser[HNil] =
-    new XmlParser[HNil] {
-      def parse(s: NodeSeq) =
-        HNil
-    }
-
-  implicit def deriveHCons[K <: Symbol, V, T <: HList]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[XmlParser[V]],
-   sct: Lazy[XmlParser[T]]
-    ): XmlParser[FieldType[K, V] :: T] =
-    new XmlParser[FieldType[K, V] :: T] {
-      def parse(jv: NodeSeq): FieldType[K, V] :: T = {
-        val childish = jv \ key.value.name
-        val child = childish.headOption.getOrElse(NodeSeq.Empty)
-        println(s"dervieHCons with jv $jv looking for ${key.value.name} found as $childish")
-        val answer = {
-          val front = scv.value.parse(child)
-          println(s"hcons front is $front")
-          val back = sct.value.parse(jv)
-          println(s"hcons back is $back")
-          field[K](front) :: back
-        }
-        println(s"HCons answer is $answer")
-        answer
+    def emptyProduct: XmlParser[HNil] =
+      new XmlParser[HNil] {
+        def parse(s: NodeSeq) = HNil
       }
+
+    def product[F, T <: HList](fieldName: String, scf: XmlParser[F], sct: XmlParser[T]) = 
+      new XmlParser[F :: T] {
+        def parse(jv: NodeSeq): F :: T = {
+          val child = jv \ fieldName
+          //val child = childish.headOption.getOrElse(NodeSeq.Empty)
+          println(s"parse product from $jv looking for $fieldName found as $child")
+          val answer = { 
+            val front = scf.parse(child)
+            println(s"hcons front is $front")
+            val back = sct.parse(jv)
+            println(s"hcons back is $back")
+            front :: back
+          }
+          println(s"HCons answer is $answer")
+          answer
+        }
+      }
+
+    implicit def emptyCoproduct: XmlParser[CNil] = new XmlParser[CNil] {
+      def parse(s: NodeSeq): CNil = throw new Exception("no coproduct found")
     }
 
-  implicit def deriveCNil: XmlParser[CNil] = new XmlParser[CNil] {
-    def parse(s: NodeSeq): CNil = throw new Exception("no coproduct found")
+    implicit def coproduct[L, R <: Coproduct](fieldName: String, scl: => XmlParser[L], scr: => XmlParser[R]) =
+      new XmlParser[L :+: R] {
+        override def parse(jv: NodeSeq): L :+: R = {
+          val child = jv \ fieldName
+          println(s"parse for deriveCCons with $jv looking for $fieldName found as $child")
+          val answer = child match {
+            case NodeSeq.Empty =>
+              println(s"trying cr.parse for $jv")
+              Inr(scr.parse(jv))
+              /*try {
+                println(s"trying cr.parse for $jv")
+                Inr(scr.parse(jv))
+              } catch {
+                case e: Exception => {
+                  Inl(scl.parse(jv))
+                }
+              }*/
+            case nn =>
+              println(s"found coproduct $fieldName, now parse it")
+              Inl(scl.parse(nn))
+          }
+          println(s"coProduct answer is $answer")
+          answer
+        }
+
+      }
+
+    implicit def project[F, G](instance: => XmlParser[G], to: F => G, from: G => F) =
+      new XmlParser[F] {
+        def parse(s: NodeSeq): F = {
+          println(s"project, parsing from $s")
+          from(instance.parse(s))
+        }
+      }
   }
-
-  implicit def deriveCCons[K <: Symbol, V, T <: Coproduct]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[XmlParser[V]],
-   sct: Lazy[XmlParser[T]]
-    ): XmlParser[FieldType[K, V] :+: T] =
-    new XmlParser[FieldType[K, V] :+: T] {
-      def parse(jv: NodeSeq): FieldType[K, V] :+: T = {
-        val child = (jv \ key.value.name)
-        println(s"parse for dervieCCons with $jv looking for ${key.value.name} found as $child")
-        val answer = child match {
-          case NodeSeq.Empty =>
-            println("missed this one, try next")
-            Inr(sct.value.parse(jv))
-          case nn =>
-            println(s"found coproduct ${key.value.name},  now parse it")
-            val parsed = scv.value.parse(nn)
-            Inl(field[K](parsed))
-        }
-        println(s"coProduct answer is $answer")
-        answer
-      }
-
-    }
-
-  implicit def deriveInstance[F, G]
-  (implicit gen: LabelledGeneric.Aux[F, G], sg: Lazy[XmlParser[G]]): XmlParser[F] =
-    new XmlParser[F] {
-      def parse(s: NodeSeq): F = {
-        val parsed = sg.value.parse(s)
-        gen.from(parsed)
-      }
-    }
-
 }
 
 trait XmlWriter[A] {
   def write(name: Option[String], a: A): NodeSeq
 }
 
-object XmlWriter {
-  def apply[T](implicit st: Lazy[XmlWriter[T]]): XmlWriter[T] = st.value
+object XmlWriter extends LabelledTypeClassCompanion[XmlWriter] {
+  def apply[T](implicit w: XmlWriter[T]) = w
 
-  def toNode(name: Option[String], ns: NodeSeq): NodeSeq = name.map(n => Elem(null, n, Null, TopScope, true, ns: _*)).getOrElse(NodeSeq.Empty)
-  def toNode(name: Option[String], s: String): NodeSeq = name.map(n => Elem(null, n, Null, TopScope, true, Text(s.trim))).getOrElse(NodeSeq.Empty)
-  def toNode(name: Option[String], content: Seq[NodeSeq]): NodeSeq = name.map(n => Elem(null, n, Null, TopScope, true, content.flatten: _*)).getOrElse(NodeSeq.Empty)
+  def toNodeSeq(nameOpt: Option[String], ns: NodeSeq): NodeSeq = 
+    nameOpt.map(n => Elem(null, n, Null, TopScope, true, ns: _*)).getOrElse(NodeSeq.Empty)
 
-  implicit def deriveHNil: XmlWriter[HNil] =
-    new XmlWriter[HNil] {
-      def write(name: Option[String], n: HNil) = List.empty
+  def toNodeSeq(nameOpt: Option[String], s: String): NodeSeq = 
+    nameOpt.map(n => Elem(null, n, Null, TopScope, true, Text(s.trim))).getOrElse(NodeSeq.Empty)
+
+  def toNodeSeq(nameOpt: Option[String], content: Seq[NodeSeq]): NodeSeq = 
+    nameOpt.map(n => Elem(null, n, Null, TopScope, true, content.flatten: _*)).getOrElse(NodeSeq.Empty)
+  
+  implicit val typeClass = new LabelledTypeClass[XmlWriter] {
+
+    def emptyProduct = new XmlWriter[HNil] {
+      def write(name: Option[String], hn: HNil): NodeSeq = {
+        println(s"emptyProduct on Write for $name")
+        assert(name == None)
+        List.empty
+      }
     }
 
-  implicit def deriveHCons[K <: Symbol, V, T <: HList]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[XmlWriter[V]],
-   sct: Lazy[XmlWriter[T]]
-    ): XmlWriter[FieldType[K, V] :: T] =
-    new XmlWriter[FieldType[K, V] :: T] {
-      def write(name: Option[String], ft: FieldType[K, V] :: T): NodeSeq = {
-        println(s"hcons writer name $name key ${key.value.name}")
-        val h = scv.value.write(Some(key.value.name), ft.head)
-        val t = sct.value.write(None, ft.tail)
-        println(s"hcons writer name $name key ${key.value.name} h is $h t is $t")
-        // this is too much like magic
-        val ht = h ++ t
-        val answer = name.map { nm =>
-          toNode(name, ht)
-        }.getOrElse(ht)
-        println(s"hcons answer is $answer")
+    def product[F, T <: HList](fieldName: String, FHead: XmlWriter[F], FTail: XmlWriter[T]) = new XmlWriter[F :: T] {
+      def write(name: Option[String], ft: F :: T): NodeSeq = {
+        println(s"product write for $fieldName in $ft name = $name")
+        val hCons = FHead.write(Some(fieldName), ft.head) ++ FTail.write(None, ft.tail)
+        val answer = name.map { _ => 
+          toNodeSeq(name, hCons)
+        }.getOrElse(hCons)
+        println(s"product for $fieldName gives $answer")
         answer
       }
     }
 
-
-  implicit def deriveCNil: XmlWriter[CNil] = new XmlWriter[CNil] {
-    def write(name: Option[String], t: CNil) = List.empty
-  }
-
-  implicit def deriveCCons[K <: Symbol, V, T <: Coproduct]
-  (implicit
-   key: Witness.Aux[K],
-   scv: Lazy[XmlWriter[V]],
-   sct: Lazy[XmlWriter[T]]
-    ): XmlWriter[FieldType[K, V] :+: T] =
-    new XmlWriter[FieldType[K, V] :+: T] {
-      def write(name: Option[String], lr: FieldType[K, V] :+: T): NodeSeq = {
-        println(s"ccons write for ${key.value.name} name $name")
-        lr match {
-          case Inl(l) => scv.value.write(Some(key.value.name), l)
-          case Inr(r) => sct.value.write(Some(key.value.name), r)
-        }
+    def emptyCoproduct = new XmlWriter[CNil] {
+      def write(name: Option[String], t: CNil) = {
+        assert(name == None)
+        List.empty
       }
     }
 
-  implicit def deriveInstance[F, G]
-  (implicit gen: LabelledGeneric.Aux[F, G], sg: Lazy[XmlWriter[G]]): XmlWriter[F] =
-    new XmlWriter[F] {
-      def write(name: Option[String], t: F): NodeSeq = sg.value.write(name, gen.to(t))
+    def coproduct[L, R <: Coproduct] (fieldName: String, CL: => XmlWriter[L], CR: => XmlWriter[R]) = new XmlWriter[L :+: R] {
+      override def write(name: Option[String], lr: L :+: R): NodeSeq = {
+        println(s"coproduct write for $fieldName name = $name")
+        val answer = lr match {
+          case Inl(l) => CL.write(Some(fieldName), l) // or List(JField(fieldName, CL.write(None, l)))
+          case Inr(r) => CR.write(None, r)
+        }
+        /*val answer = name.map { name => 
+          List(JField(fieldName, a1))
+        }.getOrElse(a1)*/
+        println(s"answer for coproduct $fieldName is $answer")
+        answer
+      }
     }
 
+    def project[F, G](instance : => XmlWriter[G], to: F => G, from: G => F) = new XmlWriter[F] {
+      def write(name: Option[String], t: F): NodeSeq = {
+        val tot = to(t)
+        println(s"project for $t name $name to(t) is $tot \nname ${t.getClass.getSimpleName}\n${instance}")
+        val answer = instance.write(name, tot)
+        println(s"project write $name answer $answer")
+        answer
+      }
+    }
+  }
+  
 }
-
 
 
 object XmlSupport2 {
@@ -182,10 +180,10 @@ object XmlSupport2 {
   import XmlWriter._
 
   implicit val IntWriter = new XmlWriter[Int] {
-    def write(name: Option[String], i: Int)  = toNode(name, i.toString)
+    def write(name: Option[String], i: Int)  = toNodeSeq(name, i.toString)
   }
   implicit val StringWriter = new XmlWriter[String] {
-    def write(name: Option[String], s: String)  = toNode(name, s)
+    def write(name: Option[String], s: String)  = toNodeSeq(name, s)
   }
 
   class OptWriter[A](implicit aWriter: XmlWriter[A]) extends XmlWriter[Option[A]] {
@@ -194,9 +192,9 @@ object XmlSupport2 {
 
   class ListWriter[A](label: String)(implicit aWriter: XmlWriter[A]) extends XmlWriter[List[A]] {
     def write(name: Option[String], aList: List[A]): NodeSeq = {
-      val items = aList.map(a => toNode(Some(label), aWriter.write(None, a)))
+      val items = aList.map(a => toNodeSeq(Some(label), aWriter.write(None, a)))
       println(s"list writer writes $items")
-      toNode(name, items)
+      toNodeSeq(name, items)
     }
   }
   implicit def mkListWriter[A](implicit aWriter: XmlWriter[A]) = new ListWriter[A]("item")
