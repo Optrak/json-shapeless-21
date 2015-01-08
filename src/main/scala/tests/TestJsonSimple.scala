@@ -83,7 +83,7 @@ object JsonParser extends LabelledTypeClassCompanion[JsonParser] {
 
 object JsonBits {
   type JResult = List[JField]
-  trait RealCoproduct
+  //trait RealCoproduct
 }
 
 import JsonBits._
@@ -95,11 +95,14 @@ trait JsonWriter[A] {
 object JsonWriter extends LabelledTypeClassCompanion[JsonWriter] {
   def apply[T](implicit w: JsonWriter[T]) = w
 
-  def toJResult(nameOpt: Option[String], ns: JResult): JResult = nameOpt.map(name => List(JField(name, ns))).getOrElse(List.empty)
+  def toJResult(nameOpt: Option[String], ns: JValue): JResult = 
+    nameOpt.map(name => List(JField(name, ns))).getOrElse(List.empty)
 
-  def toJResult(nameOpt: Option[String], s: String): JResult = nameOpt.map(name => List(JField(name, s))).getOrElse(List.empty)
+  def toJResult(nameOpt: Option[String], s: String): JResult = 
+    nameOpt.map(name => List(JField(name, s))).getOrElse(List.empty)
 
-  def toJResult(nameOpt: Option[String], content: Seq[JResult]): JResult = nameOpt.map(name => List(JField(name, content))).getOrElse(List.empty)
+  def toJResult(nameOpt: Option[String], content: Seq[JValue]): JResult = 
+    nameOpt.map(name => List(JField(name, content))).getOrElse(List.empty)
   
   implicit val typeClass = new LabelledTypeClass[JsonWriter] {
 
@@ -230,7 +233,7 @@ object TestJsonSimple extends App {
   import Common._
   import JsonSupport2._
 
-  /* Test data */
+  /* Test Data */
   
   val singleWrapped = "DinnerIn" ->
     ("target" -> "me") ~
@@ -275,7 +278,7 @@ object TestJsonSimple extends App {
     ("target" -> "me") ~
       ("menus" -> List.empty[JInt])
 
-  /* helper functions */
+  /* Helpers */
       
   def parse(n: JValue): Msg = {
     val jsonParser = JsonParser[Msg]
@@ -340,7 +343,6 @@ object TestJsonSimple extends App {
   
   /* Tests */
   
-  /*
   justParse()
 
   val m1 = Menu("soup", "beef", "ice-cream")
@@ -348,14 +350,13 @@ object TestJsonSimple extends App {
   val dinnerInWritten = write(dinnerIn)
 
   println(s"dinnerInWritten is $dinnerInWritten\n${compact(render(dinnerInWritten))}")
-  */
+  
 
   inOut(feastNoMenu)
-  /*inOut(feastWithMenus)
+  inOut(feastWithMenus)
 
   inOut(optionWrappedFriend)
   inOut(optionWrappedNoFriend)
 
   println("success")
-  */
 }

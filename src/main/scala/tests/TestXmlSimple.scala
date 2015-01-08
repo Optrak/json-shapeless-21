@@ -208,11 +208,7 @@ object TestXmlSimple extends App {
   import Common._
   import XmlSupport2._
 
-  def parse(n: NodeSeq): Msg = {
-
-    val xmlParser = XmlParser[Msg]
-    xmlParser.parse(n)
-  }
+  /* Test Data */
 
   val singleWrapped = <Stuff>
     <DinnerIn>
@@ -269,6 +265,14 @@ object TestXmlSimple extends App {
       </menus>
     </Feast>
   </Stuff>
+  
+  /* Helpers */
+  
+  def parse(n: NodeSeq): Msg = {
+
+    val xmlParser = XmlParser[Msg]
+    xmlParser.parse(n)
+  }
 
   def justParse() {
     parse(singleWrapped) match {
@@ -324,6 +328,8 @@ object TestXmlSimple extends App {
     assert(first == second, s"mismatch \n${first} and \n${second}\n${written}")
     second
   }
+  
+  /* Tests */
 
   justParse()
 
