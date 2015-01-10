@@ -278,7 +278,13 @@ object TestJsonSimple extends App {
     ("target" -> "me") ~
       ("menus" -> List.empty[JInt])
 
+  
+  // this needed for object
+  implicit val NoMsgParser = JsonParser[NoMsg.type]
+  implicit val NoMsgWriter = JsonWriter[NoMsg.type]
+
   /* Helpers */
+  
       
   def parse(n: JValue): Msg = {
     val jsonParser = JsonParser[Msg]

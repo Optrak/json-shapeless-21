@@ -208,6 +208,8 @@ object TestXmlSimple extends App {
   import Common._
   import XmlSupport2._
 
+  implicit val NoMsgParser = XmlParser[NoMsg.type]
+  implicit val NoMsgWriter = XmlWriter[NoMsg.type]
   /* Test Data */
 
   val singleWrapped = <Stuff>
